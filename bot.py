@@ -10,7 +10,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-TOKEN = os.getenv("8514534127:AAFqPCCu82681KnlektbbA2SJz5z-YunxqI")
+TOKEN = os.getenv("BOT_TOKEN")
 
 # В памяти. После перезапуска сервиса подписи обнулятся — потом можно будет сделать файл/БД.
 subscribers: set[int] = set()
