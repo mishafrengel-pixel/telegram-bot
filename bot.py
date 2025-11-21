@@ -1,21 +1,73 @@
-import asyncio
-from aiogram import Bot, Dispatcher, types
+import os
+import random
+import datetime
 
-TOKEN = "ТОКЕН_ТВОЕГО_БОТА"
+import pytz
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
 
-bot = Bot(TOKEN)
-dp = Dispatcher()
+TOKEN = os.getenv("BOT_TOKEN")
 
-@dp.message()
-async def send_random_wish(message: types.Message):
-    with open("wishes.txt", "r", encoding="utf-8") as f:
-        wishes = [w.strip() for w in f.readlines() if w.strip()]
-    import random
-    wish = random.choice(wishes)
-    await message.answer(wish)
+# В памяти. После перезапуска сервиса подписи обнулятся — потом можно будет сделать файл/БД.
+subscribers: set[int] = set()
+
+
+def load_wishes() -> list[str]:
+    """Читаем предсказания из файла wishes.txt, по одному на строку."""
+    try:
+        with open("wishes.txt", "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        return ["Сегодня будет удачный день"]
+
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    subscribers.add(chat_id)
+    await update.message.reply_text("Ты подписан на ежедневные предсказания! ✨")
+
+
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    subscribers.discard(chat_id)
+    await update.message.reply_text("Ты отписан от предсказаний.")
+
+
+async def send_daily_predictions(context: ContextTypes.DEFAULT_TYPE):
+    """Эта функция будет вызываться каждый день в 9:00 по Киеву."""
+    if not subscribers:
+        return
+
+    wishes = load_wishes()
+    text = random.choice(wishes)
+    msg = f"🔮 Предсказание на сегодня:\n\n{text}"
+
+    for chat_id in list(subscribers):
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=msg)
+        except Exception:
+            # если кого-то нельзя доставить — просто пропускаем
+            pass
+
 
 async def main():
-    await dp.start_polling(bot)
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("stop", stop_command))
+
+    # Настраиваем ежедневное отправление в 9:00 по Киеву
+    kyiv_tz = pytz.timezone("Europe/Kiev")
+    time_9 = datetime.time(hour=9, minute=0, tzinfo=kyiv_tz)
+    app.job_queue.run_daily(send_daily_predictions, time=time_9)
+
+    await app.run_polling()
+
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
