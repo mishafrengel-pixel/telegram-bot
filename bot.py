@@ -11,12 +11,11 @@ from telegram.ext import (
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# список подписчиков
 subscribers: Set[int] = set()
 
 
 def load_wishes() -> List[str]:
-    """Считывает предсказания из wishes.txt"""
+    """Считываем предсказания из wishes.txt"""
     try:
         with open("wishes.txt", "r", encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip()]
@@ -42,12 +41,9 @@ async def send_daily_predictions(context: ContextTypes.DEFAULT_TYPE):
 
     for chat_id in list(subscribers):
         try:
-            await context.bot.send_message(
-                chat_id,
-                f"Твоё предсказание на сегодня:\n\n{wish}"
-            )
+            await context.bot.send_message(chat_id, f"Твое предсказание на сегодня:\n\n{wish}")
         except Exception:
-            subscribers.discard(chat_id)
+            pass
 
 
 async def main():
@@ -56,14 +52,16 @@ async def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("stop", stop_command))
 
-    # ежедневная рассылка в 09:00 по Киеву
     application.job_queue.run_daily(
         send_daily_predictions,
-        time=None,      # запускаем сразу (можно указать timezone)
-        name="daily_job"
+        time=None,  # запускает сразу при разворачивании (Render не держит время точно)
     )
 
-    await application.run_polling()
+    # run_polling — НО НУЖНО ОТКРЫТЬ ПОРТ, чтобы Render понимал, что сервис “живой”
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await application.idle()
 
 
 if __name__ == "__main__":
